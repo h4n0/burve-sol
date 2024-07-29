@@ -11,7 +11,7 @@ pub struct InitializeArgs {
     pub admin: Pubkey,
 	pub treasury: Pubkey,
 }
-pub fn initialize(ctx: Context<BurveInitialize>, args: InitializeArgs) -> Result<()> {
+pub fn burve_initialize(ctx: Context<BurveInitialize>, args: InitializeArgs) -> Result<()> {
     ctx.accounts.burve_base.admin = args.admin;
 	ctx.accounts.burve_base.treasury = args.treasury;
     ctx.accounts.burve_base.mint_tax = 100;
@@ -19,7 +19,7 @@ pub fn initialize(ctx: Context<BurveInitialize>, args: InitializeArgs) -> Result
     Ok(())
 }
 
-pub fn set_burve_admin(ctx: Context<SetBurveAdmin>, new_admin: Pubkey) -> Result<()> {
+pub fn burve_set_admin(ctx: Context<SetBurveAdmin>, new_admin: Pubkey) -> Result<()> {
     ctx.accounts.burve_base.admin = new_admin;
     Ok(())
 }
@@ -31,7 +31,7 @@ pub struct SetBurveTreasury<'info> {
 	pub admin: Signer<'info>,
 }
 
-pub fn set_burve_treasury(ctx: Context<SetBurveTreasury>, new_treasury: Pubkey) -> Result<()> {
+pub fn burve_set_treasury(ctx: Context<SetBurveTreasury>, new_treasury: Pubkey) -> Result<()> {
 	ctx.accounts.burve_base.treasury = new_treasury;
 	Ok(())
 }
@@ -42,7 +42,7 @@ pub struct SetBurveTaxArgs {
     pub new_burn_tax: u16,
 }
 
-pub fn set_burve_tax(ctx: Context<SetBurveTax>, args: SetBurveTaxArgs) -> Result<()> {
+pub fn burve_set_tax(ctx: Context<SetBurveTax>, args: SetBurveTaxArgs) -> Result<()> {
     require!(
         args.new_mint_tax <= MAX_PLATFORM_TAX_RATE,
         Errors::TaxRateNotValid

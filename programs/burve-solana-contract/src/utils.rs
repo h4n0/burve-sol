@@ -28,6 +28,7 @@ pub enum Errors {
     TaxRateNotValid,
 }
 
+#[inline(never)]
 pub fn update_account_lamports_to_minimum_balance<'info>(
     account: AccountInfo<'info>,
     payer: AccountInfo<'info>,
@@ -43,6 +44,7 @@ pub fn update_account_lamports_to_minimum_balance<'info>(
     Ok(())
 }
 
+#[inline(never)]
 pub fn get_mint_extensible_extension_data<T: Extension + VariableLenPack>(
     account: &mut AccountInfo,
 ) -> Result<T> {
@@ -52,6 +54,7 @@ pub fn get_mint_extensible_extension_data<T: Extension + VariableLenPack>(
     Ok(extension_data)
 }
 
+#[inline(never)]
 pub fn get_mint_extension_data<T: Extension + Pod>(account: &mut AccountInfo) -> Result<T> {
     let mint_data = account.data.borrow();
     let mint_with_extension = StateWithExtensions::<Mint>::unpack(&mint_data)?;
@@ -59,6 +62,7 @@ pub fn get_mint_extension_data<T: Extension + Pod>(account: &mut AccountInfo) ->
     Ok(extension_data)
 }
 
+#[inline(never)]
 pub fn get_meta_list(approve_account: Option<Pubkey>) -> Vec<ExtraAccountMeta> {
     if let Some(approve_account) = approve_account {
         return vec![ExtraAccountMeta {
@@ -71,6 +75,7 @@ pub fn get_meta_list(approve_account: Option<Pubkey>) -> Vec<ExtraAccountMeta> {
     vec![]
 }
 
+#[inline(never)]
 pub fn get_meta_list_size(approve_account: Option<Pubkey>) -> usize {
     // safe because it's either 0 or 1
     ExtraAccountMetaList::size_of(get_meta_list(approve_account).len()).unwrap()

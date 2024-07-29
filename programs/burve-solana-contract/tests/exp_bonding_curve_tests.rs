@@ -15,7 +15,7 @@ mod tests {
         let supply = 10_000_000 * 1_000_000_000; // 1e7 * 1e18
         let px = 1_000 * 1_000; // 0.001 * 1e18
         let tvl = 2_000 * 1_000_000_000; // 2000 * 1e18
-        let round = 100;
+        let _round = 100;
 
         let a = 10_000_000; // 0.01 * 1e18
         let b = (1_000 * 1_000_000_000 / a as u128) as u64; // (1000 * 1e18) / a
@@ -35,7 +35,7 @@ mod tests {
                 0,
                 parameters.clone(),
             );
-        let (token_amount2, raising_token_amount2) =
+        let (_token_amount2, _raising_token_amount22) =
             ExpMixedBondingSwap::calculate_burn_amount_from_bonding_curve(
                 token_amount1.clone(),
                 token_amount1.clone(),

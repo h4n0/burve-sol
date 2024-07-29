@@ -27,6 +27,7 @@ struct EstimateMintResult {
 }
 
 
+#[inline(never)]
 fn estimate_mint_amount_from_bonding_curve(
 	bonding_curve_type: BondingCurveType,
 	paid_amount: u64,
@@ -73,6 +74,7 @@ pub struct EstimateBurnResult {
 	burve_fee: u64,
 }
 
+#[inline(never)]
 fn estimate_burn_amount_from_bonding_curve(
 	bonding_curve_type: BondingCurveType,
 	burning_amount: u64,
@@ -98,7 +100,7 @@ fn estimate_burn_amount_from_bonding_curve(
 					crate::Parameters { a, b },
 				)
 			}
-		};;
+		};
 
 	let project_fee = calculated_receiving_amount * project_tax as u64 / MAX_TAX_RATE_DENOMINATOR;
 	let burve_fee = calculated_receiving_amount * burve_tax as u64/ MAX_TAX_RATE_DENOMINATOR;
@@ -120,38 +122,46 @@ pub struct MintTokenWithSPL<'info> {
 		seeds = [b"burve"], 
 		bump 
 	)]
-    pub burve_base: Account<'info, BurveBase>,
+    pub burve_base: Box<Account<'info, BurveBase>>,
 	#[account(
 		constraint = project_metadata.raising_token == Some(raising_token.key()),
 		constraint = project_metadata.symbol == args.symbol,
+		constraint = project_metadata.treasury == project_treasury.key(),
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
 		bump 
 	)]
-    pub project_metadata: Account<'info, ProjectMetadata>,
+    pub project_metadata: Box<Account<'info, ProjectMetadata>>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
     pub mint: InterfaceAccount<'info, Mint>,
-	//#[account(address = project_metadata.raising_token)]
 	#[account()]
-	pub raising_token: InterfaceAccount<'info, Mint>, 
+	pub raising_token: Box<InterfaceAccount<'info, Mint>>, 
 	#[account(
 		mut,
 		seeds = [b"vault", mint.key().as_ref()],
-		bump
+		bump,
+		token::mint = raising_token,
+		token::token_program = token_program
 	)]
-	pub vault: InterfaceAccount<'info, TokenAccount>,
+	pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
 	#[account(
 		mut,
 		token::mint = raising_token,
 		token::token_program = token_program,
 	)]
-	pub project_treasury: InterfaceAccount<'info, TokenAccount>,
+	pub project_treasury: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut)]
     pub signer: Signer<'info>,
-	#[account(mut)]
-    pub from_ata: InterfaceAccount<'info, TokenAccount>,
+	#[account(
+		mut,
+		token::mint = raising_token,
+		token::token_program = token_program,
+		token::authority = signer,
+	)]
+    pub from_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 	#[account(
 		init_if_needed,
 		payer = signer,
@@ -159,7 +169,7 @@ pub struct MintTokenWithSPL<'info> {
 		associated_token::mint = mint,
 		associated_token::authority = signer,
 	)]
-	pub mint_token_account: InterfaceAccount<'info, TokenAccount>,
+	pub mint_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 	pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Program<'info, Token2022>,
@@ -172,7 +182,7 @@ pub struct MintTokenWithSPLArgs {
 	pub min_receive: u64,
 }
 
-pub fn mint_token_with_spl(
+pub fn route_mint_token_with_spl(
 	ctx: Context<MintTokenWithSPL>,
 	args: MintTokenWithSPLArgs,
 ) -> Result<()> {
@@ -249,11 +259,13 @@ pub struct BurnTokenToSPL<'info> {
 	#[account(
 		constraint = project_metadata.raising_token == Some(raising_token.key()),
 		constraint = project_metadata.symbol == args.symbol,
+		constraint = project_metadata.treasury == project_treasury.key(),
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
 		bump 
 	)]
 	pub project_metadata: Account<'info, ProjectMetadata>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
@@ -284,7 +296,6 @@ pub struct BurnTokenToSPL<'info> {
 	)]
 	pub burn_token_account: InterfaceAccount<'info, TokenAccount>,
 	pub system_program: Program<'info, System>,
-	pub associated_token_program: Program<'info, AssociatedToken>,
 	pub token_program: Program<'info, Token2022>,
 }
 
@@ -295,7 +306,7 @@ pub struct BurnTokenToSPLArgs {
 	pub min_receive: u64,
 }
 
-pub fn burn_token_to_spl(
+pub fn route_burn_token_to_spl(
 	ctx: Context<BurnTokenToSPL>,
 	args: BurnTokenToSPLArgs,
 ) -> Result<()> {
@@ -329,8 +340,8 @@ pub fn burn_token_to_spl(
 	let accounts = TransferChecked {
 		from: ctx.accounts.vault.to_account_info().clone(),
 		to: ctx.accounts.to_ata.to_account_info().clone(),
-		authority: ctx.accounts.signer.to_account_info().clone(),
-		mint: ctx.accounts.mint.to_account_info().clone(),
+		authority: ctx.accounts.mint.to_account_info().clone(),
+		mint: ctx.accounts.raising_token.to_account_info().clone(),
 	};
 	let seeds = &[MINT_ACCOUNT_SEED, args.symbol.as_bytes(), &[ctx.bumps.mint]];
 	let signer = [&seeds[..]];
@@ -344,7 +355,7 @@ pub fn burn_token_to_spl(
 	let accounts = TransferChecked {
 		from: ctx.accounts.vault.to_account_info().clone(),
 		to: ctx.accounts.project_treasury.to_account_info().clone(),
-		authority: ctx.accounts.signer.to_account_info().clone(),
+		authority: ctx.accounts.mint.to_account_info().clone(),
 		mint: ctx.accounts.raising_token.to_account_info().clone(),
 	};
 
@@ -366,19 +377,20 @@ pub struct MintTokenWithSOL<'info> {
 		seeds = [b"burve"], 
 		bump 
 	)]
-    pub burve_base: Account<'info, BurveBase>,
+    pub burve_base: Box<Account<'info, BurveBase>>,
 	#[account(
 		constraint = project_metadata.raising_token == None,
 		constraint = project_metadata.symbol == args.symbol,
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
 		bump 
 	)]
-    pub project_metadata: Account<'info, ProjectMetadata>,
+    pub project_metadata: Box<Account<'info, ProjectMetadata>>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
-    pub mint: InterfaceAccount<'info, Mint>,
+    pub mint: Box<InterfaceAccount<'info, Mint>>,
 	#[account(mut)]
 	pub from: Signer<'info>,
 	#[account(
@@ -386,11 +398,11 @@ pub struct MintTokenWithSOL<'info> {
 		seeds = [b"vault", mint.key().as_ref()],
 		bump
 	)]
-	pub vault: InterfaceAccount<'info, TokenAccount>,
+	pub vault: SystemAccount<'info>,
 	#[account(
 		mut,
 	)]
-	pub project_treasury: InterfaceAccount<'info, TokenAccount>,
+	pub project_treasury: SystemAccount<'info>,
 	#[account(
 		init_if_needed,
 		payer = from,
@@ -398,7 +410,7 @@ pub struct MintTokenWithSOL<'info> {
 		associated_token::mint = mint,
 		associated_token::authority = from,
 	)]
-	pub mint_token_account: InterfaceAccount<'info, TokenAccount>,
+	pub mint_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 	pub associated_token_program: Program<'info, AssociatedToken>,
 	pub token_program: Program<'info, Token2022>,
 	pub system_program: Program<'info, System>,
@@ -411,7 +423,7 @@ pub struct MintTokenWithSOLArgs {
 	pub min_receive: u64,
 }
 
-pub fn mint_token_with_sol(ctx: Context<MintTokenWithSOL>, args: MintTokenWithSOLArgs) -> Result<()> {
+pub fn route_mint_token_with_sol(ctx: Context<MintTokenWithSOL>, args: MintTokenWithSOLArgs) -> Result<()> {
 	// Calculate how many tokens to mint
 	let estimate_res = estimate_mint_amount_from_bonding_curve(
 		ctx.accounts.project_metadata.bonding_curve_type.clone(),
@@ -423,7 +435,7 @@ pub fn mint_token_with_sol(ctx: Context<MintTokenWithSOL>, args: MintTokenWithSO
 
 	assert!(estimate_res.calculated_receiving_amount >= args.min_receive, "min_receive not met");
 
-	// Transfer SPL token to vault
+	// Transfer SOL token to vault
 	let cpi_ctx = CpiContext::new(
 	ctx.accounts.system_program.to_account_info(), 
 	system_program::Transfer{
@@ -445,7 +457,7 @@ pub fn mint_token_with_sol(ctx: Context<MintTokenWithSOL>, args: MintTokenWithSO
 
 	system_program::transfer(cpi_ctx, estimate_res.project_fee)?;
 
-	// Mint SPL token to mint token account
+	// Mint the project SPL token to mint token account
 	let seeds = &[MINT_ACCOUNT_SEED, args.symbol.as_bytes(), &[ctx.bumps.mint]];
 	let signer = [&seeds[..]];
 
@@ -481,6 +493,7 @@ pub struct BurnTokenToSOL<'info> {
 	)]
 	pub project_metadata: Account<'info, ProjectMetadata>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
@@ -489,18 +502,22 @@ pub struct BurnTokenToSOL<'info> {
 	pub from: Signer<'info>,
 	#[account(
 		mut,
+		token::token_program = token_program,
+		token::mint = mint,
+		token::authority = from,
+	)]
+	pub burn_token_account: InterfaceAccount<'info, TokenAccount>,
+	#[account(
+		mut,
 		seeds = [b"vault", mint.key().as_ref()],
 		bump
 	)]
-	pub vault: InterfaceAccount<'info, TokenAccount>,
+	pub vault: SystemAccount<'info>,
 	#[account(
 		mut,
 	)]
-	pub project_treasury: InterfaceAccount<'info, TokenAccount>,
-	#[account(
-		mut,
-	)]
-	pub to: Signer<'info>,
+	pub project_treasury: SystemAccount<'info>,
+	pub token_program: Program<'info, Token2022>,
 	pub system_program: Program<'info, System>,
 }
 
@@ -511,7 +528,7 @@ pub struct BurnTokenToSOLArgs {
 	pub min_receive: u64,
 }
 
-pub fn burn_token_to_sol(ctx: Context<BurnTokenToSOL>, args: BurnTokenToSOLArgs) -> Result<()> {
+pub fn route_burn_token_to_sol(ctx: Context<BurnTokenToSOL>, args: BurnTokenToSOLArgs) -> Result<()> {
 	// Calculate how many tokens to burn
 	let estimate_res = estimate_burn_amount_from_bonding_curve(
 		ctx.accounts.project_metadata.bonding_curve_type.clone(),
@@ -524,26 +541,30 @@ pub fn burn_token_to_sol(ctx: Context<BurnTokenToSOL>, args: BurnTokenToSOLArgs)
 	assert!(estimate_res.actual_received_amount >= args.min_receive, "min_receive not met");
 
 	// Burn tokens
+	let seeds = &[MINT_ACCOUNT_SEED, args.symbol.as_bytes(), &[ctx.bumps.mint]];
+	let signer = [&seeds[..]];
 	burn(
-		CpiContext::new(
-			ctx.accounts.system_program.to_account_info(),
+		CpiContext::new_with_signer(
+			ctx.accounts.token_program.to_account_info(),
 			Burn {
-				authority: ctx.accounts.from.to_account_info(),
-				from: ctx.accounts.vault.to_account_info(),
+				authority: ctx.accounts.mint.to_account_info(),
+				from: ctx.accounts.burn_token_account.to_account_info(),
 				mint: ctx.accounts.mint.to_account_info(),
 			},
+			&signer
 		),
 		args.amount
 	)?;
 
-	// Transfer SPL token from vault
-	let seeds = &[MINT_ACCOUNT_SEED, args.symbol.as_bytes(), &[ctx.bumps.mint]];
+	// Transfer SOL token from vault
+	let mint_pubkey = ctx.accounts.mint.to_account_info().key;
+	let seeds = &[b"vault", mint_pubkey.as_ref(), &[ctx.bumps.vault]];
 	let signer = [&seeds[..]];
 	let cpi_ctx = CpiContext::new_with_signer(
 	ctx.accounts.system_program.to_account_info(), 
 	system_program::Transfer{
 		from: ctx.accounts.vault.to_account_info(),
-		to: ctx.accounts.to.to_account_info(),
+		to: ctx.accounts.from.to_account_info(),
 	},
 	&signer);
 
@@ -614,7 +635,7 @@ pub struct ClaimBurveSPLTaxArgs {
 	pub symbol: String,
 }
 
-pub fn claim_burve_spl_tax(ctx: Context<ClaimBurveSPLTax>, args: ClaimBurveSPLTaxArgs) -> Result<()> {
+pub fn route_claim_burve_spl_tax(ctx: Context<ClaimBurveSPLTax>, args: ClaimBurveSPLTaxArgs) -> Result<()> {
 	let burve_tax = ctx.accounts.project_metadata.burve_tax_counter;
 
 	// Transfer burve tax to burve treasury
@@ -683,7 +704,7 @@ pub struct ClaimBurveSOLTaxArgs {
 	pub symbol: String,
 }
 
-pub fn claim_burve_sol_tax(ctx: Context<ClaimBurveSOLTax>, args: ClaimBurveSOLTaxArgs) -> Result<()> {
+pub fn route_claim_burve_sol_tax(ctx: Context<ClaimBurveSOLTax>, args: ClaimBurveSOLTaxArgs) -> Result<()> {
 	let burve_tax = ctx.accounts.project_metadata.burve_tax_counter;
 
 	// Transfer burve tax to burve treasury

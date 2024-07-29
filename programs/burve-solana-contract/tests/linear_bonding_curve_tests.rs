@@ -1,7 +1,6 @@
 // tests/linear_bonding_curve_tests.rs
 use burve_solana_contract::calculations::linear_bonding_curve::LinearMixedBondingSwap;
 use burve_solana_contract::calculations::*;
-use num_bigint::BigUint;
 
 #[cfg(test)]
 mod tests {
