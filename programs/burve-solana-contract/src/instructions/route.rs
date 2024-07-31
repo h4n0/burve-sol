@@ -381,6 +381,7 @@ pub struct MintTokenWithSOL<'info> {
 	#[account(
 		constraint = project_metadata.raising_token == None,
 		constraint = project_metadata.symbol == args.symbol,
+		constraint = project_metadata.treasury == project_treasury.key(),
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
 		bump 
 	)]
@@ -596,6 +597,7 @@ pub struct ClaimBurveSPLTax<'info> {
 	)]
 	pub burve_base: Account<'info, BurveBase>,
 	#[account(
+		mut,
 		constraint = project_metadata.raising_token == Some(raising_token.key()),
 		constraint = project_metadata.symbol == args.symbol,
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
@@ -603,6 +605,7 @@ pub struct ClaimBurveSPLTax<'info> {
 	)]
 	pub project_metadata: Account<'info, ProjectMetadata>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
@@ -618,15 +621,12 @@ pub struct ClaimBurveSPLTax<'info> {
 	)]
 	pub vault: InterfaceAccount<'info, TokenAccount>,
 	#[account(
-		init_if_needed,
-		payer = admin,
-		associated_token::token_program = token_program,
-		associated_token::mint = raising_token,
-		associated_token::authority = admin,
+		mut,
+		token::token_program = token_program,
+		token::mint = raising_token,
 	)]
 	pub burve_treasury: InterfaceAccount<'info, TokenAccount>,
 	pub token_program: Program<'info, Token2022>,
-	pub associated_token_program: Program<'info, AssociatedToken>,
 	pub system_program: Program<'info, System>,
 }
 
@@ -664,24 +664,25 @@ pub fn route_claim_burve_spl_tax(ctx: Context<ClaimBurveSPLTax>, args: ClaimBurv
 pub struct ClaimBurveSOLTax<'info> {
 	#[account(
 		has_one = admin @ Errors::SignerIsNotAdmin,
+		constraint = burve_base.treasury == burve_treasury.key(),
 		seeds = [b"burve"], 
 		bump 
 	)]
 	pub burve_base: Account<'info, BurveBase>,
 	#[account(
+		mut,
 		constraint = project_metadata.raising_token == None,
 		constraint = project_metadata.symbol == args.symbol,
 		seeds = [PROJECT_METADATA_SEED, mint.key().as_ref() ], 
 		bump 
 	)]
-	pub project_metadata: Account<'info, ProjectMetadata>,
+	pub project_metadata: Box<Account<'info, ProjectMetadata>>,
 	#[account(
+		mut,
 		seeds = [MINT_ACCOUNT_SEED, args.symbol.as_bytes()],
 		bump,
 	)]  
 	pub mint: InterfaceAccount<'info, Mint>,
-	#[account()]
-	pub raising_token: InterfaceAccount<'info, Mint>,
 	#[account(mut)]
 	pub admin: Signer<'info>,
 	#[account(
@@ -689,12 +690,8 @@ pub struct ClaimBurveSOLTax<'info> {
 		seeds = [b"vault", mint.key().as_ref()],
 		bump
 	)]
-	pub vault: InterfaceAccount<'info, TokenAccount>,
-	#[account(
-		mut,
-		seeds = [b"burve-sol-treasury"],
-		bump
-	)]
+	pub vault: SystemAccount<'info>,
+	#[account(mut)]
 	pub burve_treasury: SystemAccount<'info>,
 	pub system_program: Program<'info, System>,
 }
@@ -704,11 +701,11 @@ pub struct ClaimBurveSOLTaxArgs {
 	pub symbol: String,
 }
 
-pub fn route_claim_burve_sol_tax(ctx: Context<ClaimBurveSOLTax>, args: ClaimBurveSOLTaxArgs) -> Result<()> {
+pub fn route_claim_burve_sol_tax(ctx: Context<ClaimBurveSOLTax>, _args: ClaimBurveSOLTaxArgs) -> Result<()> {
 	let burve_tax = ctx.accounts.project_metadata.burve_tax_counter;
 
 	// Transfer burve tax to burve treasury
-	let seeds = &[MINT_ACCOUNT_SEED, args.symbol.as_bytes(), &[ctx.bumps.mint]];
+	let seeds = &[b"vault", ctx.accounts.mint.to_account_info().key.as_ref(), &[ctx.bumps.vault]];
 	let signer = [&seeds[..]];
 	let cpi_ctx = CpiContext::new_with_signer(
 	ctx.accounts.system_program.to_account_info(),

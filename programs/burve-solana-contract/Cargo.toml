@@ -29,6 +29,3 @@ solana-program = "1.18.17"
 
 [dev-dependencies]
 rand = "0.8.5"
-
-[workspace]
-resolver = "2"
